@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>정하의 layering + RTD</title>
+    
+</head>
+<body>
+<div id="map" style="width:100%;height:800px;"></div>
+
+<script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=475fc5bd9cee1f1bdbbb1c5a327b6657"></script>
+<script>
+
+ // Initialize an empty array to store polygons and their names
+var polygons = [];
+
+var mapContainer = document.getElementById('map'), // 지도를 표시할 div 
+    mapOption = { 
+        center: new kakao.maps.LatLng(37.510701, 127.060667), // 지도의 중심좌표
+        level: 3 // 지도의 확대 레벨
+    };  
+
+var map = new kakao.maps.Map(mapContainer, mapOption); // 지도를 생성합니다
+
+// Fetch GeoJSON data from file
+fetch('geoJson/seoulRTD.geojson')
+    .then(response => response.json())
+    .then(data => {
+        var polygonPathArray = [];
+        // Loop through each feature in the feature collection
+        for (let feature of data.features) {
+            // Check that the geometry type is MultiPolygon
+            if (feature.geometry.type === 'MultiPolygon') {
+                // Extract the location name
+                let locationName = feature.properties.AREA_NM;
+                let locationCode = feature.properties.AREA_CD;
+                // Loop through each polygon
+                for (let polygon of feature.geometry.coordinates) {
+                    // Loop through each linear ring in the polygon
+                    for (let ring of polygon) {
+                        // make new polygonPath 
+                        let polygonPath = [];
+                        for (let coordinate of ring) {
+                            let longitude = coordinate[0];
+                            let latitude = coordinate[1];
+                            polygonPath.push(new kakao.maps.LatLng(latitude, longitude));
+                        }
+                        polygonPathArray.push({path: polygonPath, name: locationName, code: locationCode});
+                    }
+                }
+            }
+        }
+
+        // Loop through each polygonPath in polygonPathArray and creates a polygon for each
+        for (let polygonData of polygonPathArray) {
+            var polygon = new kakao.maps.Polygon({
+                path: polygonData.path, // 그려질 다각형의 좌표 배열입니다
+                strokeWeight: 3, // 선의 두께입니다
+                strokeColor: '#39DE2A', // 선의 색깔입니다
+                strokeOpacity: 0.8, // 선의 불투명도 입니다 1에서 0 사이의 값이며 0에 가까울수록 투명합니다
+                strokeStyle: 'longdash', // 선의 스타일입니다
+                fillColor: '#A2FF99', // 채우기 색깔입니다
+                fillOpacity: 0.7 // 채우기 불투명도 입니다
+            });
+            polygon.setMap(map);
+            // Store the polygon and its name in the array
+            polygons.push({polygon: polygon, name: polygonData.name, code: polygonData.code});
+            // Fetch congestion data and set polygon color
+            rtd(polygonData.name, polygons.length - 1);
+        }
+
+
+        // Now you can access each polygon by iterating over the array and attach event listeners
+        for (let i = 0; i < polygons.length; i++) {
+            kakao.maps.event.addListener(polygons[i].polygon, 'click', function() {
+                // Handle the click event here.
+                // You can use the variable 'i' inside this function to differentiate between polygons
+                alert("Polygon " + i + " was clicked! 장소명: " + polygons[i].name);
+                rtd(polygons[i].name, i);
+                
+            });
+        }
+    });
+
+//서울 실시간 도시데이타 API연동
+
+    function rtd(locationName, i) {
+    const key='6f52694e6563686f39357975444753';
+    var beginPage=1;
+    var endPage=1;
+    var searchLocation = locationName;
+    const url='http://openapi.seoul.go.kr:8088/'+key+'/xml/citydata_ppltn/'+beginPage+'/'+endPage+'/'+searchLocation;
+    
+    //fetching data from api
+    
+        fetch(url, {
+            method: 'GET',
+            headers: {
+            'Content-Type': 'application/json'
+            },
+            mode: 'cors'
+        })
+            .then(function(response) {
+            return response.text();
+            })
+            .then(function(data) {
+            const parser = new DOMParser();
+            const xml = parser.parseFromString(data, 'text/xml');
+            const jsonData = xmlToJson(xml);
+                console.log(jsonData)
+            console.log(jsonData['Map']['SeoulRtd.citydata_ppltn']['AREA_NM']['#text']);
+            console.log(jsonData);
+            
+            var jsonData2 = jsonData['Map']['SeoulRtd.citydata_ppltn']['AREA_CONGEST_LVL']['#text'];
+            var jsonData3 = jsonData['Map']['SeoulRtd.citydata_ppltn']['AREA_CONGEST_MSG']['#text'];
+
+            var congest_Lvl = jsonData2;
+            var congest_Msg = jsonData3;
+            console.log(congest_Lvl);
+            
+            switch(congest_Lvl){
+                    case "붐빔": 
+                        polygons[i].polygon.setOptions({
+                            fillColor: '#FF0000'
+                        });
+                        break;
+                    case "약간 붐빔":
+                        polygons[i].polygon.setOptions({
+                            fillColor: '#FF8000'
+                        });
+                        break;
+                    case "보통": 
+                        polygons[i].polygon.setOptions({
+                            fillColor: '#FFFF00'
+                        });
+                        break;
+                    default: 
+                        polygons[i].polygon.setOptions({
+                            fillColor: '#00FF00'
+                        });
+                        break;
+                }
+            })
+            .catch(function(err) {
+            console.log('Fetch Error :-S', err);
+            });
+
+
+    
+
+    //xmlToJson function 
+    function xmlToJson(xml) {
+    // Create the return object
+    var obj = {};
+
+    if (xml.nodeType == 1) {
+      // element
+      if (xml.attributes.length > 0) {
+        obj["@attributes"] = {};
+        for (var j = 0; j < xml.attributes.length; j++) {
+          var attribute = xml.attributes.item(j);
+          obj["@attributes"][attribute.nodeName] = attribute.nodeValue;
+        }
+      }
+    } else if (xml.nodeType == 3) {
+      // text
+      obj = xml.nodeValue;
+    }
+
+    if (xml.hasChildNodes()) {
+      for (var i = 0; i < xml.childNodes.length; i++) {
+        var item = xml.childNodes.item(i);
+        var nodeName = item.nodeName;
+        if (typeof obj[nodeName] == "undefined") {
+          obj[nodeName] = xmlToJson(item);
+        } else {
+          if (typeof obj[nodeName].push == "undefined") {
+            var old = obj[nodeName];
+            obj[nodeName] = [];
+            obj[nodeName].push(old);
+          }
+          obj[nodeName].push(xmlToJson(item));
+        }
+      }
+    }
+    return obj;
+  };
+}
+
+</script>
+</body>
+</html>

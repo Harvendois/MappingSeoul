@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>정하의 gu layering</title>
+    
+</head>
+<body>
+<div id="map" style="width:100%;height:800px;"></div>
+
+<script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=475fc5bd9cee1f1bdbbb1c5a327b6657"></script>
+<script>
+
+ // Initialize an empty array to store polygons and their names
+var polygons = [];
+
+var mapContainer = document.getElementById('map'), // 지도를 표시할 div 
+    mapOption = { 
+        center: new kakao.maps.LatLng(37.510701, 127.060667), // 지도의 중심좌표
+        level: 3 // 지도의 확대 레벨
+    };  
+
+var map = new kakao.maps.Map(mapContainer, mapOption); // 지도를 생성합니다
+
+fetch('geoJson/seoulGu_light.json')
+    .then(response => response.json())
+    .then(data => {
+        var polygonPathArray = [];
+        // Loop through each feature in the feature collection
+        for (let feature of data.features) {
+            // Check that the geometry type is Polygon
+            if (feature.geometry.type === 'Polygon') {
+                // Extract the location name
+                let locationName = feature.properties.SIG_KOR_NM;
+                let locationCode = feature.properties.SIG_CD;
+                // Loop through each linear ring in the polygon
+                for (let ring of feature.geometry.coordinates) {
+                    // make new polygonPath 
+                    let polygonPath = [];
+                    for (let coordinate of ring) {
+                        let longitude = coordinate[0];
+                        let latitude = coordinate[1];
+                        polygonPath.push(new kakao.maps.LatLng(latitude, longitude));
+                    }
+                    polygonPathArray.push({path: polygonPath, name: locationName, code: locationCode});
+                }
+            }
+        }
+
+        // Loop through each polygonPath in polygonPathArray and creates a polygon for each
+        for (let polygonData of polygonPathArray) {
+            var polygon = new kakao.maps.Polygon({
+                path: polygonData.path, // 그려질 다각형의 좌표 배열입니다
+                strokeWeight: 1, // 선의 두께입니다
+                strokeColor: 'black', // 선의 색깔입니다
+                strokeOpacity: 0.7, // 선의 불투명도 입니다 1에서 0 사이의 값이며 0에 가까울수록 투명합니다
+                strokeStyle: 'longdash', // 선의 스타일입니다
+                fillColor: '#A2FF99', // 채우기 색깔입니다
+                fillOpacity: 0.4 // 채우기 불투명도 입니다
+            });
+            polygon.setMap(map);
+            // Store the polygon and its name in the array
+            polygons.push({polygon: polygon, name: polygonData.name, code: polygonData.code});
+        }
+
+
+
+        // Now you can access each polygon by iterating over the array and attach event listeners
+        for (let i = 0; i < polygons.length; i++) {
+            kakao.maps.event.addListener(polygons[i].polygon, 'click', function() {
+                // Handle the click event here.
+                // You can use the variable 'i' inside this function to differentiate between polygons
+                alert("Polygon " + i + " was clicked! 장소명: " + polygons[i].name);
+                
+            });
+        }
+
+
+    });
+
+</script>
+</body>
+</html>
